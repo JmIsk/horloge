@@ -3,16 +3,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:solar_calculator/solar_calculator.dart';
 import 'package:stop_watch_timer/stop_watch_timer.dart';
-import 'package:intl/intl.dart';
 import 'package:spa/spa.dart';
-import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 
 void main() {
   runApp(MyApp());
 }
 
-String fmtHHMM(int hours, int mins) =>
-    '${hours.toString().padLeft(2)}:${mins.toString().padLeft(2, '0')}';
+String fmtHHMM(int hours, int mins) {
+  return '${hours.toString().padLeft(2)}:${mins.toString().padLeft(2, '0')}';
+}
 
 int displayTime() {
   return Instant.fromDateTime(DateTime.now()).time.inMilliseconds;
@@ -99,7 +98,11 @@ class StopwatchPage extends StatefulWidget {
 
 class _StopwatchPageState extends State<StopwatchPage> {
   Timer _timer;
+  Timer _timer1;
+  Timer _autoRestartTimer;
   bool _checkBox = false;
+  int secPresetTime = 60;
+  int _timerSec;
 
   final _isHours = true;
 
@@ -107,9 +110,49 @@ class _StopwatchPageState extends State<StopwatchPage> {
       StopWatchTimer(mode: StopWatchMode.countUp);
 
   final StopWatchTimer _stopWatchTimerDown =
-      StopWatchTimer(mode: StopWatchMode.countDown, presetMillisecond: 60000);
+      StopWatchTimer(mode: StopWatchMode.countDown);
 
   final _scrollController = ScrollController();
+
+  void _showDatePicker(ctx) {
+    // showCupertinoModalPopup is a built-in function of the cupertino library
+    showCupertinoModalPopup(
+        context: ctx,
+        builder: (_) => Container(
+              height: 500,
+              color: Color.fromARGB(255, 255, 255, 255),
+              child: Column(
+                children: [
+                  Container(
+                    height: 400,
+                    child: CupertinoTimerPicker(
+                        initialTimerDuration: Duration(minutes: 0),
+                        mode: CupertinoTimerPickerMode.hms,
+                        onTimerDurationChanged: (val) {
+                          setState(() {
+                            secPresetTime = val.inSeconds;
+                            _stopWatchTimerDown.clearPresetTime();
+                            _stopWatchTimerDown.setPresetTime(
+                                mSec: secPresetTime * 1000);
+                          });
+                        }),
+                  ),
+
+                  // Close the modal
+                  CupertinoButton(
+                      child: Text('OK'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      })
+                ],
+              ),
+            ));
+  }
+
+  void restartTimer() {
+    _stopWatchTimerDown.onExecute.add(StopWatchExecute.reset);
+    _stopWatchTimerDown.onExecute.add(StopWatchExecute.start);
+  }
 
   @override
   void initState() {
@@ -117,13 +160,13 @@ class _StopwatchPageState extends State<StopwatchPage> {
     _timer = new Timer.periodic(Duration(milliseconds: 500), (timer) {
       setState(() {});
     });
-
     _stopWatchTimer.setPresetTime(mSec: 0000);
-    _stopWatchTimerDown.setPresetTime(mSec: 60000);
+    _stopWatchTimerDown.setPresetTime(mSec: secPresetTime * 1000);
   }
 
   @override
   void dispose() async {
+    _autoRestartTimer.cancel();
     _timer.cancel();
     super.dispose();
     await _stopWatchTimer.dispose();
@@ -352,68 +395,59 @@ class _StopwatchPageState extends State<StopwatchPage> {
               ),
               Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                          icon: Icon(Icons.remove_circle),
-                          onPressed: () async {
-                            int count = _stopWatchTimerDown.minuteTime.value;
-                            if (count > 0)
-                              _stopWatchTimerDown
-                                  .setPresetMinuteTime(count - 1);
-                          }),
-                      Center(
-                        child: StreamBuilder<int>(
-                          stream: _stopWatchTimerDown.rawTime,
-                          initialData: _stopWatchTimerDown.rawTime.value,
-                          builder: (context, snap) {
-                            final value = snap.data;
-                            final displayTime = StopWatchTimer.getDisplayTime(
-                                value,
-                                hours: _isHours);
-                            return Column(
-                              children: <Widget>[
-                                Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Text(
-                                    displayTime,
-                                    style: const TextStyle(
-                                        fontSize: 40,
-                                        fontFamily: 'Helvetica',
-                                        fontWeight: FontWeight.normal),
-                                  ),
+                  StreamBuilder<int>(
+                    stream: _stopWatchTimerDown.rawTime,
+                    initialData: _stopWatchTimerDown.rawTime.value,
+                    builder: (context, snap) {
+                      final value = snap.data;
+                      final displayTime =
+                          StopWatchTimer.getDisplayTime(value, hours: _isHours);
+                      return Column(
+                        children: <Widget>[
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: TextButton(
+                                child: Text(
+                                  displayTime,
+                                  style: const TextStyle(
+                                      fontSize: 40,
+                                      fontFamily: 'Helvetica',
+                                      fontWeight: FontWeight.normal,
+                                      color: Colors.black),
                                 ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      IconButton(
-                          icon: Icon(Icons.add_circle_outlined),
-                          onPressed: () async {
-                            int count = _stopWatchTimerDown.minuteTime.value;
-                            _stopWatchTimerDown.setPresetMinuteTime(count + 1);
-                          }),
-                    ],
+                                onPressed: () {
+                                  if (_stopWatchTimerDown.isRunning == false) {
+                                    _showDatePicker(context);
+                                  }
+                                }),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   Row(
                     children: [
                       Checkbox(
                         value: _checkBox,
                         onChanged: (value) {
-                          var secs = _stopWatchTimerDown.secondTime.value;
-
                           setState(() {
                             _checkBox = !_checkBox;
                           });
-                          if (_checkBox == true) {
-                            Timer(Duration(seconds: secs), () {
-                              _stopWatchTimerDown.onExecute
-                                  .add(StopWatchExecute.reset);
-                              _stopWatchTimerDown.onExecute
-                                  .add(StopWatchExecute.start);
+
+                          if (_checkBox == true &&
+                              _stopWatchTimerDown.isRunning == true) {
+                            var secs = _stopWatchTimerDown.secondTime.value;
+                            _timer1 = Timer(Duration(seconds: secs), () {
+                              restartTimer();
+                              _autoRestartTimer = Timer.periodic(
+                                  Duration(seconds: secPresetTime), (timer) {
+                                restartTimer();
+                              });
                             });
+                          }
+                          if (_checkBox == false) {
+                            _autoRestartTimer.cancel();
+                            _timer1.cancel();
                           }
                         },
                       ),
@@ -424,16 +458,33 @@ class _StopwatchPageState extends State<StopwatchPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       ElevatedButton(
-                        onPressed: () async {
+                        onPressed: () {
                           _stopWatchTimerDown.onExecute
                               .add(StopWatchExecute.start);
+                          if (_checkBox == true) {
+                            _timerSec = _stopWatchTimerDown.secondTime.value;
+                            _timer1 = Timer(Duration(seconds: _timerSec), () {
+                              restartTimer();
+                              _autoRestartTimer = Timer.periodic(
+                                  Duration(seconds: secPresetTime), (timer) {
+                                restartTimer();
+                              });
+                            });
+                          } else if (_autoRestartTimer.isActive) {
+                            _autoRestartTimer.cancel();
+                          }
                         },
                         child: Text('Start'),
                       ),
                       ElevatedButton(
-                        onPressed: () async {
+                        onPressed: () {
+                          setState(() {
+                            _checkBox = false;
+                          });
                           _stopWatchTimerDown.onExecute
                               .add(StopWatchExecute.stop);
+                          _autoRestartTimer.cancel();
+                          _timer1.cancel();
                         },
                         child: Text('Stop'),
                       ),
@@ -442,6 +493,9 @@ class _StopwatchPageState extends State<StopwatchPage> {
                         onPressed: () async {
                           _stopWatchTimerDown.onExecute
                               .add(StopWatchExecute.reset);
+                          if (_autoRestartTimer.isActive) {
+                            _autoRestartTimer.cancel();
+                          }
                         },
                       ),
                     ],
